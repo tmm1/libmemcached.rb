@@ -1,0 +1,7 @@
+/Makefile
+/*.o
+/*.bundle
+/*.a
+/dst
+mkmf.log
+/src/libmemcached-1*/

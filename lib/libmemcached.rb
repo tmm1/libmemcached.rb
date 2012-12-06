@@ -1,0 +1,1 @@
+require 'libmemcached_ext'
