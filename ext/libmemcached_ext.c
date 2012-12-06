@@ -169,6 +169,94 @@ lm_mget(VALUE self, VALUE arg)
   return rb_ary_new3(2, return_codes[ret], values);
 }
 
+/* Get or set the current namespace
+ *
+ *   namespace - Optional String namespace to set
+ *
+ * Returns the current String namespace when no argument is provided
+ * Returns nil when no namespace is set and no argument is provided
+ * Returns true when a namespace is provided and set successful
+ * Returns a Symbol error code when namespace is provided and not set
+ */
+VALUE
+lm_namespace(int argc, VALUE *argv, VALUE self)
+{
+  memcached_st *memc;
+  Data_Get_Struct(rb_ivar_get(self, id_struct), memcached_st, memc);
+
+  VALUE namespace;
+  memcached_return_t ret;
+
+  if (rb_scan_args(argc, argv, "01", &namespace) == 1) {
+    ret = memcached_callback_set(memc, MEMCACHED_CALLBACK_NAMESPACE, StringValuePtr(namespace));
+    if (memcached_success(ret))
+      return Qtrue;
+  } else {
+    char *ns = (char *)memcached_callback_get(memc, MEMCACHED_CALLBACK_NAMESPACE, &ret);
+    if (memcached_success(ret))
+      return ns ? rb_str_new2(ns) : Qnil;
+  }
+  return return_codes[ret];
+}
+
+static VALUE
+_server_to_str(memcached_server_instance_st server)
+{
+  const char *type = memcached_server_type(server);
+  const char *name = memcached_server_name(server);
+  in_port_t port = memcached_server_port(server);
+  if (type[0] == 'S')
+    return rb_str_new2(name);
+  else
+    return rb_sprintf("%s:%d", name, port);
+}
+
+static memcached_return_t
+_each_server_i(const memcached_st *memc, memcached_server_instance_st server, void *context)
+{
+  VALUE ary = (VALUE)context;
+  rb_ary_push(ary, _server_to_str(server));
+  return MEMCACHED_SUCCESS;
+}
+
+/* List of current servers
+ *
+ * Returns an Array of "hostname:port" or "/path/to/socket" servers
+ */
+VALUE
+lm_servers(VALUE self)
+{
+  memcached_st *memc;
+  Data_Get_Struct(rb_ivar_get(self, id_struct), memcached_st, memc);
+
+  memcached_return_t ret;
+  memcached_server_fn callbacks[1] = {_each_server_i};
+  VALUE servers = rb_ary_new();
+  memcached_server_cursor(memc, callbacks, (void *)servers, 1);
+  return servers;
+}
+
+/* Retrieve the server for a given key
+ *
+ *   key - String key to lookup in server ring
+ *
+ * Returns a String server name
+ */
+VALUE
+lm_server_by_key(VALUE self, VALUE key)
+{
+  memcached_st *memc;
+  Data_Get_Struct(rb_ivar_get(self, id_struct), memcached_st, memc);
+
+  memcached_return_t ret;
+  memcached_server_instance_st server;
+  server = memcached_server_by_key(memc, RSTRING_PTR(key), RSTRING_LEN(key), &ret);
+  if (server)
+    return _server_to_str(server);
+  else
+    return return_codes[ret];
+}
+
 void
 Init_libmemcached_ext()
 {
@@ -183,6 +271,10 @@ Init_libmemcached_ext()
   rb_define_method(rb_cNativeClient, "get", lm_get, 1);
   rb_define_method(rb_cNativeClient, "set", lm_set, -1);
   rb_define_method(rb_cNativeClient, "mget", lm_mget, 1);
+  rb_define_method(rb_cNativeClient, "namespace", lm_namespace, -1);
+  rb_define_alias(rb_cNativeClient,  "namespace=", "namespace");
+  rb_define_method(rb_cNativeClient, "servers", lm_servers, 0);
+  rb_define_method(rb_cNativeClient, "server_by_key", lm_server_by_key, 1);
 
   id_struct = rb_intern("struct");
 }
