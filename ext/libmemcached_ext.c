@@ -8,6 +8,13 @@ VALUE rb_cNativeClient;
 VALUE rb_eConfigurationError;
 ID id_struct;
 
+/* Create a native memcache client
+ *
+ *   config - String configuration params
+ *
+ * Returns a new object
+ * Raises ConfigurationError on config parse errors
+ */
 VALUE
 lm_initialize(VALUE self, VALUE config)
 {
@@ -139,18 +146,19 @@ lm_mget(VALUE self, VALUE arg)
     lens[n] = RSTRING_LEN(RARRAY_PTR(arg)[n]);
   }
 
+  VALUE values = rb_hash_new();
+
   memcached_return_t ret;
   ret = memcached_mget(memc, (const char * const *)keys, (const size_t *)lens, num_keys);
   if (!memcached_success(ret))
-    return Qfalse;
+    return rb_ary_new3(2, return_codes[ret], values);
 
-  VALUE values = rb_hash_new();
   memcached_result_st results_obj;
   memcached_result_st *results = memcached_result_create(memc, &results_obj);
   while ((results = memcached_fetch_result(memc, results, &ret)) != NULL) {
     if (ret == MEMCACHED_END)
       break;
-    else if (memcached_continue(ret))
+    else if (memcached_continue(ret) || ret == MEMCACHED_NOTFOUND)
       continue;
     else if (ret == MEMCACHED_SUCCESS) {
       const char *key = memcached_result_key_value(results);
@@ -159,10 +167,9 @@ lm_mget(VALUE self, VALUE arg)
       size_t value_length = memcached_result_length(results);
       uint32_t flags = memcached_result_flags(results);
 
-      /* rb_hash_aset(values, rb_str_new(key, key_length), rb_str_new(value, value_length));*/
       rb_hash_aset(values, rb_str_new(key, key_length), rb_ary_new3(2, rb_str_new(value, value_length), LONG2FIX(flags)));
     } else
-      break;
+      break; // should we keep looping instead, until END
   }
   memcached_result_free(&results_obj);
 
@@ -261,6 +268,9 @@ void
 Init_libmemcached_ext()
 {
   Init_return_codes();
+
+  if (strcmp("1.0.14", memcached_lib_version()) != 0)
+    rb_raise(rb_eRuntimeError, "invalid libmemcached version (expected: 1.0.14, actual: %s)", memcached_lib_version());
 
   rb_mLibmemcached = rb_define_module("Libmemcached");
   rb_cNativeClient = rb_define_class_under(rb_mLibmemcached, "NativeClient", rb_cObject);

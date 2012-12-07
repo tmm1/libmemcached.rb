@@ -63,6 +63,11 @@ class ClientTest < Test::Unit::TestCase
     assert_equal [:end, values_with_flags], client.mget(values.keys)
   end
 
+  def test_bad_mget
+    client = native_client()
+    assert_equal [:bad_key_provided, {}], client.mget(['foo'*100])
+  end
+
   def test_delete
     client = native_client()
     assert_equal true, client.set('foo', 'bar')
