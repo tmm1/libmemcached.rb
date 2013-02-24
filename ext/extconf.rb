@@ -11,6 +11,8 @@ end
 require 'mkmf'
 require 'fileutils'
 
+xsystem('pwd') # to create mkmf.log before the chdir
+
 unless File.exists?('librubymemcached.a')
   lib = File.basename(Dir["#{CWD}/src/libmemcached-1.*.tar.gz"].first)
   dir = File.basename(lib, '.tar.gz')
@@ -21,9 +23,8 @@ unless File.exists?('librubymemcached.a')
     FileUtils.rm_rf(dir) if File.exists?(dir)
     sys("tar zpxvf #{lib}")
     Dir.chdir(dir) do
-      sys("env -i CFLAGS=-fPIC CXXFLAGS=-lstdc++ ./configure --prefix=#{CWD}/dst --without-memcached --disable-dependency-tracking --disable-shared")
-      sys("make")
-      sys("make install")
+      sys("env CXXFLAGS=-lstdc++ ./configure --with-pic --prefix=#{CWD}/dst --without-memcached --disable-dependency-tracking --disable-shared")
+      sys("make install noinst_PROGRAMS= check_PROGRAMS=")
     end
   end
 
