@@ -23,7 +23,7 @@ unless File.exists?('librubymemcached.a')
     FileUtils.rm_rf(dir) if File.exists?(dir)
     sys("tar zpxvf #{lib}")
     Dir.chdir(dir) do
-      sys("env CXXFLAGS=-lstdc++ ./configure --with-pic --prefix=#{CWD}/dst --without-memcached --disable-dependency-tracking --disable-shared")
+      sys("./configure --with-pic --prefix=#{CWD}/dst --without-memcached --disable-dependency-tracking --disable-shared")
       sys("make install noinst_PROGRAMS= check_PROGRAMS=")
     end
   end
@@ -59,4 +59,5 @@ def add_define(name)
   $defs.push("-D#{name}")
 end
 
+CONFIG['LDSHARED'] = "$(CXX) " + CONFIG['LDSHARED'].split[1..-1].join(' ')
 create_makefile 'libmemcached_ext'
